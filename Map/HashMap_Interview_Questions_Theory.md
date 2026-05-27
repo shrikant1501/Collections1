@@ -13,6 +13,8 @@ This comprehensive guide covers the 10 most important HashMap interview question
 8. [Can mutable objects be keys?](#8-can-mutable-objects-be-keys)
 9. [What is load factor?](#9-what-is-load-factor)
 10. [What is rehashing?](#10-what-is-rehashing)
+11. [Java 8 Treeification](#11-java-8-treeification)
+12. [Why does HashMap allow one null key?](#12-why-does-hashmap-allow-one-null-key)
 
 ---
 
@@ -21,13 +23,14 @@ This comprehensive guide covers the 10 most important HashMap interview question
 ### Most Critical Points to Remember
 
 **HashMap Internals:**
-- Uses array of buckets
-- hashCode() determines bucket
+- Uses Node<K,V>[] array of buckets
+- hashCode() determines bucket using (n-1) & hash
 - equals() finds exact key
-- Java 8: Linked list → Tree after 8 entries
+- Java 8: Linked list → Tree after 8 entries (when capacity ≥ 64)
 
 **equals() and hashCode():**
 - Both must be overridden together
+- Contract: if a.equals(b) is true, then a.hashCode() == b.hashCode()
 - hashCode() finds bucket (fast)
 - equals() finds exact key (accurate)
 - Breaking contract causes bugs
@@ -54,8 +57,14 @@ This comprehensive guide covers the 10 most important HashMap interview question
 
 **Load Factor & Rehashing:**
 - Default 0.75 (75% full triggers resize)
+- Threshold = Capacity × Load Factor (e.g., 16 × 0.75 = 12)
 - Rehashing redistributes all entries
 - Capacity doubles on resize
+
+**Null Key Handling:**
+- Null key stored in bucket 0 (no hashCode calculation)
+- Only one null key allowed
+- Multiple null values allowed
 
 ---
 
@@ -82,22 +91,22 @@ Due to the comprehensive nature of this guide, detailed explanations for each of
 ### Quick Interview Answers
 
 **Q1: How does HashMap work internally?**
-"HashMap uses an array of buckets. When you put a key-value pair, it calculates the key's hashCode to determine the bucket index. If multiple keys map to the same bucket (collision), it uses a linked list or tree (Java 8+) to store them. When retrieving, it uses hashCode to find the bucket, then equals() to find the exact key."
+"HashMap internally uses a Node<K,V>[] array of buckets. When you put a key-value pair, it calculates the key's hashCode and converts it to a bucket index using (n-1) & hash, where n is the capacity. If multiple keys map to the same bucket (collision), it uses a linked list or tree (Java 8+) to store them. When retrieving, it uses hashCode to find the bucket, then equals() to find the exact key."
 
 **Q2: Why are equals() and hashCode() important?**
-"HashMap uses hashCode() to quickly find the bucket (O(1)), and equals() to find the exact key within that bucket. You need both because hashCode() alone can't guarantee uniqueness due to collisions, and equals() alone would be too slow (O(n)). They must be overridden together to maintain the contract."
+"HashMap uses hashCode() to quickly find the bucket (O(1)), and equals() to find the exact key within that bucket. You need both because hashCode() alone can't guarantee uniqueness due to collisions, and equals() alone would be too slow (O(n)). They must be overridden together to maintain the contract: if two objects are equal according to equals(), they must return the same hashCode()."
 
 **Q3: What happens if two keys have same hashCode?**
 "It's called a collision. Both keys go to the same bucket. HashMap stores them in a linked list (or tree in Java 8+ after 8 entries). When searching, it uses equals() to differentiate between keys in the same bucket."
 
 **Q4: Why is HashMap O(1)?**
-"HashMap achieves O(1) through direct array access using hashing. The hashCode is converted to a bucket index, and arrays provide O(1) access. With good hash distribution and load factor 0.75, most buckets have 0-2 entries, making operations constant time on average."
+"HashMap achieves O(1) through direct array access using hashing. The hashCode is converted to a bucket index, and arrays provide O(1) access. Good hash distribution minimizes collisions, helping maintain near O(1) average complexity. The load factor of 0.75 ensures the map resizes before becoming too dense, keeping performance optimal."
 
 **Q5: Difference between HashMap and Hashtable?**
 "Hashtable is synchronized (thread-safe but slow), doesn't allow null keys/values, and is legacy. HashMap is not synchronized (faster), allows one null key and multiple null values, and is modern. For thread-safety, use ConcurrentHashMap instead of Hashtable."
 
 **Q6: Difference between HashMap and ConcurrentHashMap?**
-"ConcurrentHashMap is thread-safe using lock striping (segments with individual locks), allowing concurrent writes to different segments. HashMap is not thread-safe. ConcurrentHashMap doesn't allow nulls, has lock-free reads, and provides atomic operations like putIfAbsent."
+"ConcurrentHashMap provides thread safety with fine-grained synchronization and CAS (Compare-And-Swap) operations, allowing high concurrency and better performance than Hashtable. HashMap is not thread-safe. ConcurrentHashMap doesn't allow null keys or values, has lock-free reads, and provides atomic operations like putIfAbsent, making it ideal for multi-threaded applications."
 
 **Q7: Why are keys immutable in HashMap?**
 "If a key changes after insertion, its hashCode changes, causing the entry to be in the wrong bucket. The entry becomes unreachable because get() looks in a different bucket. Immutable keys ensure hashCode never changes, keeping entries retrievable."
@@ -106,7 +115,7 @@ Due to the comprehensive nature of this guide, detailed explanations for each of
 "Technically yes, but practically dangerous. If you modify a key after insertion, its hashCode changes, making the entry unreachable. This leads to lost entries and bugs. Best practice is to use immutable classes like String or Integer as keys."
 
 **Q9: What is load factor?**
-"Load factor (default 0.75) determines when HashMap resizes. It's the ratio of entries to capacity. When 75% full, HashMap doubles capacity and rehashes all entries. 0.75 balances memory usage and performance - lower means fewer collisions but more memory, higher means more collisions but less memory."
+"Load factor (default 0.75) determines when HashMap resizes. It's the ratio of entries to capacity. The threshold is calculated as: Threshold = Capacity × Load Factor. For example, with capacity 16 and load factor 0.75, threshold is 12. When size reaches 12, HashMap doubles capacity and rehashes all entries. 0.75 balances memory usage and performance - lower means fewer collisions but more memory, higher means more collisions but less memory."
 
 **Q10: What is rehashing?**
 "Rehashing occurs when HashMap resizes. All existing entries are recalculated and redistributed across the new, larger bucket array. This maintains O(1) performance by keeping entries per bucket low. It's O(n) but happens infrequently, making it O(1) amortized."
@@ -166,20 +175,29 @@ Test your understanding:
    - Answer: Entry becomes unreachable, lost in wrong bucket
 
 5. Why is ConcurrentHashMap better than Hashtable?
-   - Answer: Lock striping allows better concurrency, lock-free reads
+   - Answer: Fine-grained synchronization and CAS operations allow better concurrency, lock-free reads
+
+6. What are the conditions for treeification in Java 8?
+   - Answer: Bucket size > 8 AND table capacity ≥ 64
+
+7. Where is the null key stored in HashMap?
+   - Answer: Bucket 0 (index 0), since null has no hashCode
 
 ---
 
 ## Summary
 
 **Master these concepts:**
-- HashMap uses array + linked list/tree
-- hashCode() + equals() work together
+- HashMap uses Node<K,V>[] array + linked list/tree
+- Index calculation: (n-1) & hash
+- hashCode() + equals() work together (contract: equals → same hashCode)
 - Collisions are normal, handled efficiently
 - O(1) average, O(log n) worst case (Java 8+)
+- Treeification: bucket size > 8 AND capacity ≥ 64
 - Use immutable keys
-- Load factor 0.75 is optimal
-- ConcurrentHashMap for thread-safety
+- Load factor 0.75 is optimal (Threshold = Capacity × Load Factor)
+- Null key stored in bucket 0
+- ConcurrentHashMap for thread-safety (fine-grained sync + CAS)
 
 **Remember:**
 - Explain step-by-step for "how it works"
@@ -189,3 +207,8 @@ Test your understanding:
 - Show understanding of internals
 
 Good luck with your interviews!
+**Q11: Java 8 Treeification (Advanced Topic)**
+"In Java 8, when collisions increase in a bucket, HashMap converts the linked list to a balanced tree (Red-Black Tree) for better performance. This happens when: (1) bucket size exceeds 8 entries, AND (2) table capacity is at least 64. This improves worst-case search time from O(n) to O(log n). The tree converts back to a linked list when bucket size reduces to 6 or fewer entries. This is a significant performance improvement over Java 7."
+
+**Q12: Why does HashMap allow one null key?**
+"HashMap allows one null key because null is treated as a special case. Since null has no hashCode(), HashMap stores the null key in bucket 0 (index 0) by default. When you put or get with a null key, HashMap directly checks bucket 0 without calculating hashCode. This is why only one null key is allowed - multiple null keys would be duplicates. However, multiple null values are allowed because values don't need to be unique."
